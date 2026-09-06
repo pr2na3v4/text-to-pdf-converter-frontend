@@ -1,12 +1,12 @@
 import { useState, useCallback } from "react";
-import { generateSimplePDF, generateAdvancedPDF } from "../services/api";
+import { generateSimplePDF, generateAdvancedPDF, generateAIPDF } from "../services/api";
 
 const usePDFGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(0);
 
-  const downloadBlob = (blob, filename = "SmartPDF.pdf") => {
+  const downloadBlob = (blob, filename = "makemypdf.pdf") => {
     const url = window.URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
     const link = document.createElement("a");
     link.href = url;
@@ -79,12 +79,46 @@ const usePDFGenerator = () => {
     }
   }, []);
 
+  // NEW: AI-powered generation. Only raw_text is required — the backend
+  // (Groq) derives the title, structure, tables, etc. Progress is staged a
+  // little differently since the AI analysis step is the slow part, not the
+  // PDF render itself.
+  const generateAI = useCallback(async (payload) => {
+    if (!payload.raw_text?.trim()) {
+      setError("Please enter some text to analyze");
+      return false;
+    }
+
+    setLoading(true);
+    setError(null);
+    setProgress(20);
+
+    try {
+      setProgress(40); // sent to backend, waiting on Groq analysis
+      const blob = await generateAIPDF(payload);
+      setProgress(90); // analysis done, PDF rendered, downloading
+
+      const filename = payload.filename || "ai-document.pdf";
+      downloadBlob(blob, filename);
+
+      setProgress(100);
+      return true;
+    } catch (err) {
+      setError(err.message || "Failed to generate AI-powered PDF.");
+      return false;
+    } finally {
+      setLoading(false);
+      setTimeout(() => setProgress(0), 1000);
+    }
+  }, []);
+
   return {
     loading,
     error,
     progress,
     generateSimple,
     generateAdvanced,
+    generateAI,
     clearError: () => setError(null),
   };
 };
